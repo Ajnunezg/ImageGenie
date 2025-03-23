@@ -78,9 +78,157 @@ class ImageGeneratorApp:
         self.carousel = None
         self.carousel_images = []
         
+        # Flag to track if token has been set and should be hidden
+        self.token_is_set = False
+        
+        # Create menu bar
+        self.create_menu()
+        
         self.create_widgets()
         self.load_saved_token()
         
+    def create_menu(self):
+        """Create application menu bar"""
+        menubar = tk.Menu(self.root)
+        self.root.config(menu=menubar)
+        
+        # File menu
+        file_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="File", menu=file_menu)
+        
+        # API Token menu item
+        file_menu.add_command(label="Change API Token", command=self.show_api_token_dialog)
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=self.on_closing)
+        
+        # Help menu
+        help_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Help", menu=help_menu)
+        help_menu.add_command(label="About", command=self.show_about)
+    
+    def show_api_token_dialog(self):
+        """Show a dialog to change the API token"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Change API Token")
+        dialog.geometry("400x200")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)  # Make dialog modal
+        dialog.grab_set()
+        
+        # Center the dialog
+        dialog.update_idletasks()
+        width = dialog.winfo_width()
+        height = dialog.winfo_height()
+        x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (dialog.winfo_screenheight() // 2) - (height // 2)
+        dialog.geometry(f'{width}x{height}+{x}+{y}')
+        
+        # Content frame
+        content_frame = ttk.Frame(dialog, padding=20)
+        content_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Token label and entry
+        ttk.Label(content_frame, text="Enter Replicate API Token:").pack(anchor=tk.W, pady=(0, 5))
+        
+        token_entry = ttk.Entry(content_frame, width=40, show="•")
+        token_entry.pack(fill=tk.X, pady=(0, 10))
+        
+        # Pre-fill with existing token if available
+        current_token = self.token_entry.get() if hasattr(self, 'token_entry') else ""
+        if current_token:
+            token_entry.insert(0, current_token)
+        
+        # Save checkbox
+        save_token_var = tk.BooleanVar(value=self.save_token_var.get() if hasattr(self, 'save_token_var') else False)
+        ttk.Checkbutton(content_frame, text="Save API Token", variable=save_token_var).pack(anchor=tk.W)
+        
+        # Button frame
+        button_frame = ttk.Frame(content_frame)
+        button_frame.pack(fill=tk.X, pady=(20, 0))
+        
+        # Save button
+        save_button = ttk.Button(
+            button_frame, 
+            text="Save", 
+            command=lambda: self.save_api_token_from_dialog(token_entry.get(), save_token_var.get(), dialog)
+        )
+        save_button.pack(side=tk.RIGHT, padx=5)
+        
+        # Cancel button
+        cancel_button = ttk.Button(
+            button_frame, 
+            text="Cancel", 
+            command=dialog.destroy
+        )
+        cancel_button.pack(side=tk.RIGHT, padx=5)
+    
+    def save_api_token_from_dialog(self, token, save, dialog):
+        """Save the API token entered in the dialog"""
+        if not token:
+            messagebox.showerror("Error", "Please enter an API token", parent=dialog)
+            return
+        
+        # Update token entry if it exists
+        if hasattr(self, 'token_entry'):
+            self.token_entry.delete(0, tk.END)
+            self.token_entry.insert(0, token)
+        
+        # Update save checkbox
+        if hasattr(self, 'save_token_var'):
+            self.save_token_var.set(save)
+        
+        # Save to file if requested
+        if save:
+            self.save_token_to_file(token)
+        
+        # Set environment variable
+        os.environ["REPLICATE_API_TOKEN"] = token
+        
+        # Mark token as set to hide the entry field
+        self.token_is_set = True
+        
+        # Hide token frame if it exists
+        if hasattr(self, 'token_frame'):
+            self.token_frame.pack_forget()
+        
+        # Close dialog
+        dialog.destroy()
+        
+        # Add log message
+        self.add_log("API token updated successfully")
+    
+    def show_about(self):
+        """Show the about dialog"""
+        about_dialog = tk.Toplevel(self.root)
+        about_dialog.title("About AI Image Generator")
+        about_dialog.geometry("400x300")
+        about_dialog.resizable(False, False)
+        about_dialog.transient(self.root)
+        
+        # Center dialog
+        about_dialog.update_idletasks()
+        width = about_dialog.winfo_width()
+        height = about_dialog.winfo_height()
+        x = (about_dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (about_dialog.winfo_screenheight() // 2) - (height // 2)
+        about_dialog.geometry(f'{width}x{height}+{x}+{y}')
+        
+        content_frame = ttk.Frame(about_dialog, padding=20)
+        content_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # App title
+        ttk.Label(content_frame, text="AI Image Generator", font=("Helvetica", 16, "bold")).pack(pady=(0, 10))
+        
+        # Description
+        description = "A desktop application for generating images with AI models from Replicate"
+        ttk.Label(content_frame, text=description, wraplength=350).pack(pady=(0, 20))
+        
+        # Version
+        ttk.Label(content_frame, text="Version 1.0").pack()
+        
+        # Close button
+        ttk.Button(content_frame, text="Close", command=about_dialog.destroy).pack(pady=(20, 0))
+    
     def create_widgets(self):
         # Main container
         main_frame = ttk.Frame(self.root)
@@ -102,44 +250,30 @@ class ImageGeneratorApp:
         self.embedded_carousel_frame = ttk.Frame(self.right_panel)
         self.embedded_carousel_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Carousel heading and fullscreen button
+        # Carousel heading
         carousel_header = ttk.Frame(self.embedded_carousel_frame)
         carousel_header.pack(fill=tk.X)
         
         carousel_title = ttk.Label(carousel_header, text="Generated Images", font=('Helvetica', 14, 'bold'))
         carousel_title.pack(side=tk.LEFT, pady=5)
         
-        self.fullscreen_button = tk.Button(
-            carousel_header,
-            text="Open Fullscreen",
-            bg=self.primary_color,
-            fg="white",
-            font=('Helvetica', 10),
-            relief=tk.FLAT,
-            padx=10,
-            pady=5,
-            command=self.show_fullscreen_carousel,
-            state=tk.DISABLED
-        )
-        self.fullscreen_button.pack(side=tk.RIGHT, pady=5, padx=5)
-        
         # Create the embedded carousel components
         self.create_embedded_carousel()
         
-        # API Token frame
-        token_frame = ttk.Frame(left_panel)
-        token_frame.pack(fill=tk.X, pady=10)
+        # API Token frame - will be hidden once token is set
+        self.token_frame = ttk.Frame(left_panel)
+        self.token_frame.pack(fill=tk.X, pady=10)
         
-        token_label = ttk.Label(token_frame, text="Replicate API Token:")
+        token_label = ttk.Label(self.token_frame, text="Replicate API Token:")
         token_label.pack(anchor=tk.W)
         
-        self.token_entry = ttk.Entry(token_frame, width=30, show="•")
+        self.token_entry = ttk.Entry(self.token_frame, width=30, show="•")
         self.token_entry.pack(fill=tk.X, pady=5)
         
         # Save token checkbox
         self.save_token_var = tk.BooleanVar(value=False)
         save_token_cb = ttk.Checkbutton(
-            token_frame,
+            self.token_frame,
             text="Save API Token",
             variable=self.save_token_var
         )
@@ -162,24 +296,15 @@ class ImageGeneratorApp:
         self.prompt_text.pack(fill=tk.X, pady=5)
         self.prompt_text.insert(tk.END, "an iguana on the beach, pointillism")
         
-        # Model selection frame
+        # Model selection frame with dropdown
         model_frame = ttk.Frame(left_panel)
         model_frame.pack(fill=tk.X, pady=10)
         
         model_label = ttk.Label(model_frame, text="Select Models:")
-        model_label.pack(anchor=tk.W)
+        model_label.pack(anchor=tk.W, pady=(0, 5))
         
-        # Create checkboxes for model selection
-        self.model_vars = {}
-        for model_name in self.available_models.keys():
-            var = tk.BooleanVar(value=False)
-            self.model_vars[model_name] = var
-            cb = ttk.Checkbutton(model_frame, text=model_name, variable=var)
-            cb.pack(anchor=tk.W, padx=10)
-        
-        # Select the first model by default
-        first_model = list(self.available_models.keys())[0]
-        self.model_vars[first_model].set(True)
+        # Create the multi-select dropdown
+        self.create_model_dropdown(model_frame)
         
         # Advanced options frame (collapsible)
         self.advanced_frame = ttk.Frame(left_panel)
@@ -290,12 +415,12 @@ class ImageGeneratorApp:
         selected_models = []
         
         # Check if custom model is selected
-        if self.show_advanced.get() and self.use_custom_model.get():
+        if self.show_advanced and self.use_custom_model.get():
             custom_model = self.custom_model_entry.get().strip()
             if custom_model:
                 return [("Custom Model", custom_model)]
         
-        # Get all selected models from checkboxes
+        # Get all selected models from the dropdown
         for model_name, var in self.model_vars.items():
             if var.get():
                 model_id = self.available_models[model_name]
@@ -323,6 +448,10 @@ class ImageGeneratorApp:
             with open(self.settings_file, 'w') as f:
                 json.dump(settings, f)
             
+            # Mark token as set and hide the token frame
+            self.token_is_set = True
+            self.token_frame.pack_forget()
+            
             self.add_log("API token saved successfully")
         except Exception as e:
             self.add_log(f"Error saving API token: {str(e)}")
@@ -330,7 +459,19 @@ class ImageGeneratorApp:
     def load_saved_token(self):
         """Load the saved API token if available"""
         try:
-            if os.path.exists(self.settings_file):
+            has_token = False
+            
+            # First check environment variable
+            api_token = os.environ.get("REPLICATE_API_TOKEN", "")
+            if api_token:
+                self.token_entry.delete(0, tk.END)
+                self.token_entry.insert(0, api_token)
+                self.save_token_var.set(True)
+                has_token = True
+                self.add_log("Using API token from environment")
+            
+            # Then check saved token
+            elif os.path.exists(self.settings_file):
                 with open(self.settings_file, 'r') as f:
                     settings = json.load(f)
                 
@@ -338,7 +479,14 @@ class ImageGeneratorApp:
                     self.token_entry.delete(0, tk.END)
                     self.token_entry.insert(0, settings['api_token'])
                     self.save_token_var.set(True)
+                    has_token = True
                     self.add_log("Loaded saved API token")
+            
+            # If we have a token and the setting to save it, hide the token frame
+            if has_token and self.save_token_var.get():
+                self.token_is_set = True
+                self.token_frame.pack_forget()
+                
         except Exception as e:
             self.add_log(f"Error loading saved API token: {str(e)}")
     
@@ -563,43 +711,45 @@ class ImageGeneratorApp:
         filepath: Path to the saved image
         identifier: Unique identifier (usually model_name) to prevent duplicates
         """
-        # Check if we already have an image with this identifier
-        # This prevents duplicate images from being added from the same model
-        if identifier:
-            # Check if this model already has an image in the carousel
-            existing_indices = [i for i, (_, name, _) in enumerate(self.carousel_images) if name == model_name]
+        # Find any existing images for this model
+        existing_indices = [i for i, (_, name, _) in enumerate(self.carousel_images) if name == model_name]
+        
+        if existing_indices:
+            # Get the index of the existing image
+            index = existing_indices[0]
             
-            # If we already have an image from this model, replace it instead of adding a new one
-            if existing_indices:
-                index = existing_indices[0]
-                self.carousel_images[index] = (image, model_name, filepath)
+            # Replace the existing image with the new one
+            self.carousel_images[index] = (image, model_name, filepath)
+            
+            # If currently viewing the replaced image, update the display
+            if self.embedded_current_index == index:
+                self.update_embedded_carousel()
+            
+            # Update existing fullscreen carousel if it's open
+            if self.carousel and self.carousel.winfo_exists():
+                # Update the image in the fullscreen carousel too
+                self.carousel.images[index] = (image, model_name, filepath)
+                if self.carousel.current_index == index:
+                    self.carousel.update_display()
+                    
+            self.add_log(f"Updated existing image for {model_name}")
+            
+        else:
+            # No existing image for this model, add a new one
+            self.carousel_images.append((image, model_name, filepath))
+            
+            # Update embedded carousel to show the new image
+            self.embedded_current_index = len(self.carousel_images) - 1  # Show newest image
+            self.update_embedded_carousel()
+            
+            # Update existing fullscreen carousel if it's open
+            if self.carousel and self.carousel.winfo_exists():
+                self.carousel.add_image(image, model_name, filepath)
+                # Also update fullscreen carousel to show latest image
+                self.carousel.current_index = self.embedded_current_index
+                self.carousel.update_display()
                 
-                # If currently viewing the replaced image, update the display
-                if self.embedded_current_index == index:
-                    self.update_embedded_carousel()
-                
-                # Update existing fullscreen carousel if it's open
-                if self.carousel and self.carousel.winfo_exists():
-                    # Update the image in the fullscreen carousel too
-                    self.carousel.images[index] = (image, model_name, filepath)
-                    if self.carousel.current_index == index:
-                        self.carousel.update_display()
-                
-                return
-        
-        # Add new image to carousel
-        self.carousel_images.append((image, model_name, filepath))
-        
-        # Always update embedded carousel to show latest image
-        self.embedded_current_index = len(self.carousel_images) - 1  # Show newest image
-        self.update_embedded_carousel()
-        
-        # Update existing fullscreen carousel if it's open
-        if self.carousel and self.carousel.winfo_exists():
-            self.carousel.add_image(image, model_name, filepath)
-            # Also update fullscreen carousel to show latest image
-            self.carousel.current_index = self.embedded_current_index
-            self.carousel.update_display()
+            self.add_log(f"Added new image for {model_name}")
     
     def show_carousel(self):
         """Show the image carousel in a fullscreen window"""
@@ -634,6 +784,21 @@ class ImageGeneratorApp:
         
         # Create label but don't pack it - we'll use place to center it
         self.embedded_image_label = ttk.Label(image_bg_frame, background=self.bg_color)
+        
+        # Create fullscreen button (we'll create it as a Unicode character for the fullscreen icon)
+        self.fullscreen_button = tk.Button(
+            image_bg_frame,
+            text="⛶",  # Unicode fullscreen symbol
+            bg=self.primary_color,
+            fg="white",
+            font=('Helvetica', 12),
+            relief=tk.FLAT,
+            width=2,
+            height=1,
+            command=self.show_fullscreen_carousel,
+            state=tk.DISABLED
+        )
+        # Position will be set dynamically when images are displayed
         
         # Navigation area
         nav_frame = ttk.Frame(carousel_frame)
@@ -732,6 +897,14 @@ class ImageGeneratorApp:
         # Center the image label in its frame
         self.embedded_image_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
         
+        # Position the fullscreen button in the bottom right corner
+        # Get the parent frame dimensions
+        parent = self.fullscreen_button.master
+        parent.update_idletasks()  # Make sure dimensions are updated
+        
+        # Place fullscreen button 10 pixels from the bottom right corner
+        self.fullscreen_button.place(relx=1.0, rely=1.0, x=-10, y=-10, anchor=tk.SE)
+        
         # Update labels
         self.embedded_model_label.config(text=f"Model: {model_name}")
         self.embedded_counter_label.config(text=f"Image {self.embedded_current_index + 1} of {len(self.carousel_images)}")
@@ -767,6 +940,147 @@ class ImageGeneratorApp:
         # Set the carousel to the same index as the embedded one
         self.carousel.current_index = self.embedded_current_index
         self.carousel.update_display()
+
+    def create_model_dropdown(self, parent):
+        """Create a multi-select dropdown for model selection"""
+        # Frame to contain the dropdown
+        dropdown_frame = ttk.Frame(parent)
+        dropdown_frame.pack(fill=tk.X)
+        
+        # Selected models display
+        self.selected_models_display = ttk.Entry(dropdown_frame, state="readonly")
+        self.selected_models_display.pack(fill=tk.X, side=tk.LEFT, expand=True)
+        
+        # Palette icon for dropdown (using Unicode palette symbol)
+        self.dropdown_button = tk.Button(
+            dropdown_frame,
+            text="🎨",  # Unicode palette symbol
+            font=("Helvetica", 10),  # Smaller font size for the icon
+            bg=self.bg_color,
+            relief=tk.FLAT,
+            padx=3,
+            pady=2,
+            command=self.toggle_model_dropdown
+        )
+        self.dropdown_button.pack(side=tk.RIGHT)
+        
+        # Dictionary to store model checkboxes variables
+        self.model_vars = {}
+        
+        # Initialize model vars for all available models
+        for model_name in self.available_models.keys():
+            self.model_vars[model_name] = tk.BooleanVar(value=False)
+        
+        # Select the first model by default
+        first_model = list(self.available_models.keys())[0]
+        self.model_vars[first_model].set(True)
+        
+        # Create the dropdown window (initially hidden)
+        self.dropdown_window = None
+        
+        # Update the display to show initially selected models
+        self.update_selected_models_display()
+    
+    def toggle_model_dropdown(self):
+        """Toggle the model selection dropdown"""
+        if self.dropdown_window and self.dropdown_window.winfo_exists():
+            self.dropdown_window.destroy()
+            self.dropdown_window = None
+            return
+        
+        # Get position for the dropdown
+        x = self.selected_models_display.winfo_rootx()
+        y = self.selected_models_display.winfo_rooty() + self.selected_models_display.winfo_height()
+        
+        # Create dropdown window
+        self.dropdown_window = tk.Toplevel(self.root)
+        self.dropdown_window.wm_overrideredirect(True)  # No window decorations
+        self.dropdown_window.geometry(f"250x{len(self.available_models) * 30 + 50}+{x}+{y}")
+        self.dropdown_window.configure(bg="#ffffff", highlightbackground=self.primary_color, highlightthickness=1)
+        
+        # Title for dropdown
+        title_frame = tk.Frame(self.dropdown_window, bg="#f5f5f5", padx=5, pady=5)
+        title_frame.pack(fill=tk.X)
+        
+        title_label = tk.Label(
+            title_frame, 
+            text="Select AI Models",
+            font=("Helvetica", 10, "bold"),
+            bg="#f5f5f5"
+        )
+        title_label.pack(anchor=tk.W)
+        
+        # Container for checkboxes
+        checkbox_container = tk.Frame(self.dropdown_window, bg="#ffffff", padx=5, pady=5)
+        checkbox_container.pack(fill=tk.BOTH, expand=True)
+        
+        # Add checkbox for each model
+        for model_name, var in self.model_vars.items():
+            cb = ttk.Checkbutton(
+                checkbox_container, 
+                text=model_name,
+                variable=var,
+                command=self.update_selected_models_display
+            )
+            cb.pack(anchor=tk.W, pady=2)
+        
+        # Add Done button
+        button_frame = tk.Frame(self.dropdown_window, bg="#ffffff", pady=5)
+        button_frame.pack(fill=tk.X)
+        
+        done_button = tk.Button(
+            button_frame,
+            text="Done",
+            bg=self.primary_color,
+            fg="white",
+            relief=tk.FLAT,
+            padx=10,
+            command=self.close_dropdown
+        )
+        done_button.pack(pady=5)
+        
+        # Close dropdown when clicking outside
+        self.root.bind("<Button-1>", self.check_dropdown_click, add="+")
+        self.dropdown_window.bind("<Button-1>", lambda e: "break")  # Prevent clicks from reaching root
+    
+    def close_dropdown(self):
+        """Close the dropdown menu"""
+        if self.dropdown_window and self.dropdown_window.winfo_exists():
+            self.dropdown_window.destroy()
+            self.dropdown_window = None
+            
+            # Remove click binding
+            self.root.unbind("<Button-1>", funcid=None)
+    
+    def check_dropdown_click(self, event):
+        """Check if click is outside dropdown and close if needed"""
+        if self.dropdown_window and self.dropdown_window.winfo_exists():
+            x, y = event.x_root, event.y_root
+            dropdown_x = self.dropdown_window.winfo_rootx()
+            dropdown_y = self.dropdown_window.winfo_rooty()
+            dropdown_width = self.dropdown_window.winfo_width()
+            dropdown_height = self.dropdown_window.winfo_height()
+            
+            # Check if click is outside dropdown
+            if (x < dropdown_x or x > dropdown_x + dropdown_width or 
+                y < dropdown_y or y > dropdown_y + dropdown_height):
+                self.close_dropdown()
+    
+    def update_selected_models_display(self):
+        """Update the display showing selected models"""
+        selected = [name for name, var in self.model_vars.items() if var.get()]
+        
+        if not selected:
+            display_text = "No models selected"
+        elif len(selected) <= 2:
+            display_text = ", ".join(selected)
+        else:
+            display_text = f"{len(selected)} models selected"
+        
+        self.selected_models_display.configure(state="normal")
+        self.selected_models_display.delete(0, tk.END)
+        self.selected_models_display.insert(0, display_text)
+        self.selected_models_display.configure(state="readonly")
 
 class RoundedButton(tk.Canvas):
     """Custom canvas button with rounded corners"""
