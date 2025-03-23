@@ -296,15 +296,31 @@ class ImageGeneratorApp:
         self.prompt_text.pack(fill=tk.X, pady=5)
         self.prompt_text.insert(tk.END, "an iguana on the beach, pointillism")
         
-        # Model selection frame with dropdown
+        # Model selection frame with dropdown instead of checkboxes
         model_frame = ttk.Frame(left_panel)
         model_frame.pack(fill=tk.X, pady=10)
         
         model_label = ttk.Label(model_frame, text="Select Models:")
-        model_label.pack(anchor=tk.W, pady=(0, 5))
+        model_label.pack(anchor=tk.W)
         
-        # Create the multi-select dropdown
-        self.create_model_dropdown(model_frame)
+        # Create a frame for the dropdown
+        dropdown_frame = ttk.Frame(model_frame)
+        dropdown_frame.pack(fill=tk.X, pady=5)
+        
+        # Create the multiselect dropdown
+        self.model_selector = MultiSelectDropdown(
+            dropdown_frame, 
+            options=list(self.available_models.keys()),
+            width=30,
+            placeholder="Select models...",
+            bg_color=self.bg_color,
+            select_color=self.primary_color
+        )
+        self.model_selector.pack(fill=tk.X)
+        
+        # Select the first model by default
+        first_model = list(self.available_models.keys())[0]
+        self.model_selector.select_item(first_model)
         
         # Advanced options frame (collapsible)
         self.advanced_frame = ttk.Frame(left_panel)
@@ -415,16 +431,15 @@ class ImageGeneratorApp:
         selected_models = []
         
         # Check if custom model is selected
-        if self.show_advanced and self.use_custom_model.get():
+        if self.show_advanced.get() and self.use_custom_model.get():
             custom_model = self.custom_model_entry.get().strip()
             if custom_model:
                 return [("Custom Model", custom_model)]
         
         # Get all selected models from the dropdown
-        for model_name, var in self.model_vars.items():
-            if var.get():
-                model_id = self.available_models[model_name]
-                selected_models.append((model_name, model_id))
+        for model_name in self.model_selector.get_selected():
+            model_id = self.available_models[model_name]
+            selected_models.append((model_name, model_id))
         
         return selected_models
     
@@ -941,147 +956,6 @@ class ImageGeneratorApp:
         self.carousel.current_index = self.embedded_current_index
         self.carousel.update_display()
 
-    def create_model_dropdown(self, parent):
-        """Create a multi-select dropdown for model selection"""
-        # Frame to contain the dropdown
-        dropdown_frame = ttk.Frame(parent)
-        dropdown_frame.pack(fill=tk.X)
-        
-        # Selected models display
-        self.selected_models_display = ttk.Entry(dropdown_frame, state="readonly")
-        self.selected_models_display.pack(fill=tk.X, side=tk.LEFT, expand=True)
-        
-        # Palette icon for dropdown (using Unicode palette symbol)
-        self.dropdown_button = tk.Button(
-            dropdown_frame,
-            text="🎨",  # Unicode palette symbol
-            font=("Helvetica", 10),  # Smaller font size for the icon
-            bg=self.bg_color,
-            relief=tk.FLAT,
-            padx=3,
-            pady=2,
-            command=self.toggle_model_dropdown
-        )
-        self.dropdown_button.pack(side=tk.RIGHT)
-        
-        # Dictionary to store model checkboxes variables
-        self.model_vars = {}
-        
-        # Initialize model vars for all available models
-        for model_name in self.available_models.keys():
-            self.model_vars[model_name] = tk.BooleanVar(value=False)
-        
-        # Select the first model by default
-        first_model = list(self.available_models.keys())[0]
-        self.model_vars[first_model].set(True)
-        
-        # Create the dropdown window (initially hidden)
-        self.dropdown_window = None
-        
-        # Update the display to show initially selected models
-        self.update_selected_models_display()
-    
-    def toggle_model_dropdown(self):
-        """Toggle the model selection dropdown"""
-        if self.dropdown_window and self.dropdown_window.winfo_exists():
-            self.dropdown_window.destroy()
-            self.dropdown_window = None
-            return
-        
-        # Get position for the dropdown
-        x = self.selected_models_display.winfo_rootx()
-        y = self.selected_models_display.winfo_rooty() + self.selected_models_display.winfo_height()
-        
-        # Create dropdown window
-        self.dropdown_window = tk.Toplevel(self.root)
-        self.dropdown_window.wm_overrideredirect(True)  # No window decorations
-        self.dropdown_window.geometry(f"250x{len(self.available_models) * 30 + 50}+{x}+{y}")
-        self.dropdown_window.configure(bg="#ffffff", highlightbackground=self.primary_color, highlightthickness=1)
-        
-        # Title for dropdown
-        title_frame = tk.Frame(self.dropdown_window, bg="#f5f5f5", padx=5, pady=5)
-        title_frame.pack(fill=tk.X)
-        
-        title_label = tk.Label(
-            title_frame, 
-            text="Select AI Models",
-            font=("Helvetica", 10, "bold"),
-            bg="#f5f5f5"
-        )
-        title_label.pack(anchor=tk.W)
-        
-        # Container for checkboxes
-        checkbox_container = tk.Frame(self.dropdown_window, bg="#ffffff", padx=5, pady=5)
-        checkbox_container.pack(fill=tk.BOTH, expand=True)
-        
-        # Add checkbox for each model
-        for model_name, var in self.model_vars.items():
-            cb = ttk.Checkbutton(
-                checkbox_container, 
-                text=model_name,
-                variable=var,
-                command=self.update_selected_models_display
-            )
-            cb.pack(anchor=tk.W, pady=2)
-        
-        # Add Done button
-        button_frame = tk.Frame(self.dropdown_window, bg="#ffffff", pady=5)
-        button_frame.pack(fill=tk.X)
-        
-        done_button = tk.Button(
-            button_frame,
-            text="Done",
-            bg=self.primary_color,
-            fg="white",
-            relief=tk.FLAT,
-            padx=10,
-            command=self.close_dropdown
-        )
-        done_button.pack(pady=5)
-        
-        # Close dropdown when clicking outside
-        self.root.bind("<Button-1>", self.check_dropdown_click, add="+")
-        self.dropdown_window.bind("<Button-1>", lambda e: "break")  # Prevent clicks from reaching root
-    
-    def close_dropdown(self):
-        """Close the dropdown menu"""
-        if self.dropdown_window and self.dropdown_window.winfo_exists():
-            self.dropdown_window.destroy()
-            self.dropdown_window = None
-            
-            # Remove click binding
-            self.root.unbind("<Button-1>", funcid=None)
-    
-    def check_dropdown_click(self, event):
-        """Check if click is outside dropdown and close if needed"""
-        if self.dropdown_window and self.dropdown_window.winfo_exists():
-            x, y = event.x_root, event.y_root
-            dropdown_x = self.dropdown_window.winfo_rootx()
-            dropdown_y = self.dropdown_window.winfo_rooty()
-            dropdown_width = self.dropdown_window.winfo_width()
-            dropdown_height = self.dropdown_window.winfo_height()
-            
-            # Check if click is outside dropdown
-            if (x < dropdown_x or x > dropdown_x + dropdown_width or 
-                y < dropdown_y or y > dropdown_y + dropdown_height):
-                self.close_dropdown()
-    
-    def update_selected_models_display(self):
-        """Update the display showing selected models"""
-        selected = [name for name, var in self.model_vars.items() if var.get()]
-        
-        if not selected:
-            display_text = "No models selected"
-        elif len(selected) <= 2:
-            display_text = ", ".join(selected)
-        else:
-            display_text = f"{len(selected)} models selected"
-        
-        self.selected_models_display.configure(state="normal")
-        self.selected_models_display.delete(0, tk.END)
-        self.selected_models_display.insert(0, display_text)
-        self.selected_models_display.configure(state="readonly")
-
 class RoundedButton(tk.Canvas):
     """Custom canvas button with rounded corners"""
     def __init__(self, parent, width, height, corner_radius, bg_color, fg_color, text, command=None, **kwargs):
@@ -1438,6 +1312,206 @@ class ImageCarousel(tk.Toplevel):
             # If current view is the replaced image, update the display
             if self.current_index == index:
                 self.update_display()
+
+class MultiSelectDropdown(ttk.Frame):
+    """A custom dropdown widget that allows multiple selections"""
+    def __init__(self, parent, options=None, width=30, placeholder="Select items...", 
+                 bg_color="#FFFFFF", select_color="#4285f4", **kwargs):
+        super().__init__(parent, **kwargs)
+        
+        self.parent = parent
+        self.options = options or []
+        self.width = width
+        self.placeholder = placeholder
+        self.bg_color = bg_color
+        self.select_color = select_color
+        
+        # Variables to track state
+        self.is_open = False
+        self.selected = {}  # Dictionary to track selected items
+        
+        # Initialize selected items
+        for option in self.options:
+            self.selected[option] = False
+        
+        # Create the main button that shows the dropdown
+        self.dropdown_button = tk.Button(
+            self,
+            text=self.placeholder,
+            relief=tk.GROOVE,
+            bg="white",
+            anchor=tk.W,
+            padx=8,
+            pady=4,
+            width=width,
+            command=self.toggle_dropdown,
+            highlightthickness=1,
+            highlightcolor="#CCCCCC"
+        )
+        self.dropdown_button.pack(fill=tk.X)
+        
+        # Create a frame for the dropdown window
+        self.dropdown_window = None
+        
+        # Bind events
+        self.bind("<FocusOut>", self.on_focus_out)
+    
+    def toggle_dropdown(self):
+        """Toggle the dropdown visibility"""
+        if self.is_open:
+            self.close_dropdown()
+        else:
+            self.open_dropdown()
+    
+    def open_dropdown(self):
+        """Open the dropdown"""
+        if self.is_open:
+            return
+        
+        self.is_open = True
+        
+        # Get position and size of the dropdown button
+        x = self.dropdown_button.winfo_rootx()
+        y = self.dropdown_button.winfo_rooty() + self.dropdown_button.winfo_height()
+        width = self.dropdown_button.winfo_width()
+        
+        # Create a toplevel window for the dropdown
+        self.dropdown_window = tk.Toplevel(self)
+        self.dropdown_window.wm_overrideredirect(True)  # No window decorations
+        self.dropdown_window.geometry(f"{width}x{min(len(self.options) * 30, 200)}+{x}+{y}")
+        self.dropdown_window.configure(bg="white", highlightthickness=1, highlightbackground="#CCCCCC")
+        
+        # Create a canvas with a scrollbar for long lists
+        canvas_frame = ttk.Frame(self.dropdown_window)
+        canvas_frame.pack(fill=tk.BOTH, expand=True)
+        
+        canvas = tk.Canvas(canvas_frame, bg="white", bd=0, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(canvas_frame, orient=tk.VERTICAL, command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Create a frame inside the canvas for the options
+        options_frame = ttk.Frame(canvas)
+        canvas.create_window((0, 0), window=options_frame, anchor=tk.NW, width=width-scrollbar.winfo_reqwidth())
+        
+        # Add checkboxes for each option
+        self.option_vars = {}
+        for i, option in enumerate(self.options):
+            var = tk.BooleanVar(value=self.selected[option])
+            self.option_vars[option] = var
+            
+            # Create a frame for each option to handle hover effect
+            option_frame = ttk.Frame(options_frame)
+            option_frame.pack(fill=tk.X)
+            
+            # Configure hover effect
+            option_frame.bind("<Enter>", lambda e, f=option_frame: f.configure(style="Hover.TFrame"))
+            option_frame.bind("<Leave>", lambda e, f=option_frame: f.configure(style="TFrame"))
+            
+            # Create checkbox with styled label
+            cb = ttk.Checkbutton(
+                option_frame, 
+                text=option, 
+                variable=var,
+                command=lambda o=option: self.on_option_click(o),
+                style="MultiSelect.TCheckbutton"
+            )
+            cb.pack(side=tk.LEFT, padx=5, pady=3, fill=tk.X, expand=True)
+        
+        # Update the scrollregion
+        options_frame.update_idletasks()
+        canvas.configure(scrollregion=canvas.bbox("all"))
+        
+        # Close dropdown when clicking outside
+        self.dropdown_window.bind("<FocusOut>", self.on_focus_out)
+        self.dropdown_window.bind("<ButtonPress-1>", self.on_button_press)
+        
+        # Focus the dropdown window
+        self.dropdown_window.focus_set()
+        
+        # Configure hover style
+        self.style = ttk.Style()
+        self.style.configure("Hover.TFrame", background="#F0F0F0")
+        self.style.configure("MultiSelect.TCheckbutton", background="white")
+    
+    def close_dropdown(self):
+        """Close the dropdown"""
+        if not self.is_open:
+            return
+        
+        self.is_open = False
+        if self.dropdown_window:
+            self.dropdown_window.destroy()
+            self.dropdown_window = None
+        
+        # Update the button text to show selected items
+        self.update_button_text()
+    
+    def on_option_click(self, option):
+        """Handle option click"""
+        self.selected[option] = self.option_vars[option].get()
+        self.update_button_text()
+    
+    def update_button_text(self):
+        """Update the dropdown button to reflect selected items"""
+        selected_items = [option for option, selected in self.selected.items() if selected]
+        
+        if not selected_items:
+            self.dropdown_button.config(text=self.placeholder)
+        elif len(selected_items) == 1:
+            self.dropdown_button.config(text=selected_items[0])
+        else:
+            self.dropdown_button.config(text=f"{len(selected_items)} models selected")
+    
+    def on_focus_out(self, event):
+        """Close dropdown when focus is lost"""
+        if self.is_open and self.dropdown_window and not self.dropdown_window.focus_get():
+            self.close_dropdown()
+    
+    def on_button_press(self, event):
+        """Track button presses to handle outside clicks"""
+        # This allows clicking on items inside the dropdown
+        if not (0 <= event.x < self.dropdown_window.winfo_width() and 
+                0 <= event.y < self.dropdown_window.winfo_height()):
+            self.close_dropdown()
+    
+    def get_selected(self):
+        """Get the list of selected items"""
+        return [option for option, selected in self.selected.items() if selected]
+    
+    def select_item(self, item):
+        """Select a specific item"""
+        if item in self.selected:
+            self.selected[item] = True
+            if hasattr(self, 'option_vars') and item in self.option_vars:
+                self.option_vars[item].set(True)
+            self.update_button_text()
+    
+    def deselect_item(self, item):
+        """Deselect a specific item"""
+        if item in self.selected:
+            self.selected[item] = False
+            if hasattr(self, 'option_vars') and item in self.option_vars:
+                self.option_vars[item].set(False)
+            self.update_button_text()
+    
+    def select_all(self):
+        """Select all items"""
+        for option in self.options:
+            self.selected[option] = True
+            if hasattr(self, 'option_vars') and option in self.option_vars:
+                self.option_vars[option].set(True)
+        self.update_button_text()
+    
+    def deselect_all(self):
+        """Deselect all items"""
+        for option in self.options:
+            self.selected[option] = False
+            if hasattr(self, 'option_vars') and option in self.option_vars:
+                self.option_vars[option].set(False)
+        self.update_button_text()
 
 if __name__ == "__main__":
     root = tk.Tk()
