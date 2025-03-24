@@ -19,7 +19,7 @@ from tkinter import font
 class ImageGeneratorApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("ImageGenie")
+        self.root.title("AI Image Generator")
         self.root.geometry("900x700")
         self.root.configure(bg="#f0f0f0")
         
@@ -27,18 +27,21 @@ class ImageGeneratorApp:
         self.style = ttk.Style()
         self.style.theme_use('clam')
         
-        # Configure colors
-        self.primary_color = "#4285f4"  # Google blue
-        self.bg_color = "#f0f0f0"
-        self.accent_color = "#fbbc05"  # Google yellow
+        # Configure colors for better contrast
+        self.primary_color = "#FF9933"  # Tangerine orange
+        self.bg_color = "#f0f0f0"       # Light gray background
+        self.text_color = "#333333"     # Dark gray text for high contrast
+        self.button_text_color = "#000000"  # Black text on buttons for maximum contrast
+        self.accent_color = "#FF8C00"   # Darker tangerine for accents
         
+        # Configure styles with improved contrast
         self.style.configure('TFrame', background=self.bg_color)
-        self.style.configure('TLabel', background=self.bg_color, font=('Helvetica', 12))
+        self.style.configure('TLabel', background=self.bg_color, font=('Helvetica', 12), foreground=self.text_color)
         self.style.configure('TEntry', font=('Helvetica', 12))
         self.style.configure('TButton', 
                              font=('Helvetica', 12, 'bold'),
                              background=self.primary_color,
-                             foreground='white')
+                             foreground=self.button_text_color)
         
         # Additional style for image frame
         self.style.configure('ImageBg.TFrame', background='#ffffff', relief='groove', borderwidth=2)
@@ -262,7 +265,7 @@ class ImageGeneratorApp:
         carousel_header = ttk.Frame(self.embedded_carousel_frame)
         carousel_header.pack(fill=tk.X)
         
-        carousel_title = ttk.Label(carousel_header, text="Generated Images", font=('Helvetica', 14, 'bold'))
+        carousel_title = ttk.Label(carousel_header, text="", font=('Helvetica', 14, 'bold'))
         carousel_title.pack(side=tk.LEFT, pady=5)
         
         # Create the embedded carousel components
@@ -296,13 +299,91 @@ class ImageGeneratorApp:
         prompt_frame = ttk.Frame(left_panel)
         prompt_frame.pack(fill=tk.X, pady=10)
         
-        prompt_label = ttk.Label(prompt_frame, text="Image Prompt:")
-        prompt_label.pack(anchor=tk.W)
+        # Prompt label with enhance button
+        prompt_header = ttk.Frame(prompt_frame)
+        prompt_header.pack(fill=tk.X)
         
-        self.prompt_text = scrolledtext.ScrolledText(prompt_frame, height=4, width=30, wrap=tk.WORD,
-                                  font=('Helvetica', 10))
+        prompt_label = ttk.Label(prompt_header, text="Image Prompt:")
+        prompt_label.pack(side=tk.LEFT, anchor=tk.W)
+        
+        # Updated enhance button with lighter styling
+        enhance_button = tk.Button(
+            prompt_header,
+            text="✨ Enhance",
+            bg=self.primary_color,  # Tangerine orange background
+            fg=self.button_text_color,  # Black text
+            font=('Helvetica', 9, 'bold'),
+            relief=tk.RAISED,
+            borderwidth=1,  # Reduced border width
+            padx=5,
+            pady=2,
+            command=self.enhance_prompt
+        )
+        enhance_button.pack(side=tk.RIGHT, padx=(5, 0))
+        
+        # Updated prompt text with less contrast
+        self.prompt_text = scrolledtext.ScrolledText(
+            prompt_frame, 
+            height=4, 
+            width=30, 
+            wrap=tk.WORD,
+            font=('Helvetica', 10),
+            background="#FAFAFA",  # Light gray background instead of black
+            foreground="#333333",  # Dark gray text for readability
+            insertbackground="#333333"  # Dark gray cursor
+        )
         self.prompt_text.pack(fill=tk.X, pady=5)
-        self.prompt_text.insert(tk.END, "Starry Night in NYC, in the sytle of Vincent Van Gogh's Starry Night")
+        self.prompt_text.insert(tk.END, "Starry Night in NYC, in the style of Vincent Van Gogh's Starry Night")
+        
+        # Enhanced prompt frame (initially hidden)
+        self.enhanced_prompt_frame = ttk.Frame(prompt_frame)
+        
+        enhanced_label = ttk.Label(self.enhanced_prompt_frame, text="Enhanced Prompt Suggestion:")
+        enhanced_label.pack(anchor=tk.W, pady=(10, 5))
+        
+        self.enhanced_prompt_text = scrolledtext.ScrolledText(
+            self.enhanced_prompt_frame, 
+            height=6, 
+            width=30, 
+            wrap=tk.WORD,
+            font=('Helvetica', 10),
+            background="#F5FAFF"  # Light blue background to differentiate
+        )
+        self.enhanced_prompt_text.pack(fill=tk.X, pady=5)
+        
+        # Button frame in enhanced prompt
+        btn_frame = ttk.Frame(self.enhanced_prompt_frame)
+        btn_frame.pack(fill=tk.X, pady=(0, 5))
+        
+        # Use suggestion button
+        use_suggestion_btn = tk.Button(
+            btn_frame,
+            text="Use This",
+            bg=self.primary_color,
+            fg=self.button_text_color,
+            font=('Helvetica', 9, 'bold'),
+            relief=tk.RAISED,
+            borderwidth=2,
+            padx=5,
+            pady=2,
+            command=self.use_enhanced_prompt
+        )
+        use_suggestion_btn.pack(side=tk.LEFT)
+        
+        # Dismiss button
+        dismiss_btn = tk.Button(
+            btn_frame,
+            text="Dismiss",
+            bg="#CCCCCC",
+            fg=self.button_text_color,
+            font=('Helvetica', 9),
+            relief=tk.RAISED,
+            borderwidth=2,
+            padx=5,
+            pady=2,
+            command=lambda: self.enhanced_prompt_frame.pack_forget()
+        )
+        dismiss_btn.pack(side=tk.LEFT, padx=(5, 0))
         
         # Model selection frame with dropdown instead of checkboxes
         model_frame = ttk.Frame(left_panel)
@@ -426,7 +507,7 @@ class ImageGeneratorApp:
         timeout_entry = ttk.Entry(timeout_frame, width=10, textvariable=self.timeout_var)
         timeout_entry.pack(anchor=tk.W, pady=5)
         
-        # Generate button
+        # Generate button with high contrast
         button_frame = ttk.Frame(left_panel)
         button_frame.pack(fill=tk.X, pady=10)
         
@@ -434,9 +515,10 @@ class ImageGeneratorApp:
             button_frame, 
             text="Generate Images",
             bg=self.primary_color,
-            fg="white",
+            fg=self.button_text_color,  # Black text for high contrast
             font=('Helvetica', 11, 'bold'),
-            relief=tk.FLAT,
+            relief=tk.RAISED,  # Changed from FLAT to RAISED for better visibility
+            borderwidth=2,     # Increased border width for visibility
             padx=15,
             pady=8,
             command=self.generate_images
@@ -872,14 +954,15 @@ class ImageGeneratorApp:
         # Create label but don't pack it - we'll use place to center it
         self.embedded_image_label = ttk.Label(image_bg_frame, background=self.bg_color)
         
-        # Create fullscreen button (we'll create it as a Unicode character for the fullscreen icon)
+        # Create fullscreen button with better contrast
         self.fullscreen_button = tk.Button(
             image_bg_frame,
             text="⛶",  # Unicode fullscreen symbol
             bg=self.primary_color,
-            fg="white",
-            font=('Helvetica', 12),
-            relief=tk.FLAT,
+            fg=self.button_text_color,  # Black text for contrast
+            font=('Helvetica', 14),  # Increased font size
+            relief=tk.RAISED,  # Better visibility
+            borderwidth=2,     # Increased border
             width=2,
             height=1,
             command=self.show_fullscreen_carousel,
@@ -891,14 +974,15 @@ class ImageGeneratorApp:
         nav_frame = ttk.Frame(carousel_frame)
         nav_frame.pack(fill=tk.X, pady=5)
         
-        # Left button
+        # Left button with improved contrast
         self.embedded_left_btn = tk.Button(
             nav_frame,
             text="←",
             bg=self.primary_color,
-            fg="white",
-            font=('Helvetica', 12, 'bold'),
-            relief=tk.FLAT,
+            fg=self.button_text_color,  # Black text for contrast
+            font=('Helvetica', 14, 'bold'),  # Increased font size
+            relief=tk.RAISED,  # Better visibility
+            borderwidth=2,     # Increased border
             width=2,
             command=self.embedded_prev_image
         )
@@ -924,14 +1008,15 @@ class ImageGeneratorApp:
         )
         self.embedded_counter_label.pack(anchor=tk.CENTER)
         
-        # Right button
+        # Right button with improved contrast
         self.embedded_right_btn = tk.Button(
             nav_frame,
             text="→",
             bg=self.primary_color,
-            fg="white",
-            font=('Helvetica', 12, 'bold'),
-            relief=tk.FLAT,
+            fg=self.button_text_color,  # Black text for contrast
+            font=('Helvetica', 14, 'bold'),  # Increased font size
+            relief=tk.RAISED,  # Better visibility
+            borderwidth=2,     # Increased border
             width=2,
             command=self.embedded_next_image
         )
@@ -1119,6 +1204,132 @@ class ImageGeneratorApp:
         if 1 <= new_value <= 5:  # Limit to a reasonable range
             self.images_per_model.set(new_value)
 
+    def enhance_prompt(self):
+        """Enhance the user's prompt using Claude 3.7 Sonnet"""
+        # Get the current prompt
+        original_prompt = self.prompt_text.get("1.0", tk.END).strip()
+        
+        if not original_prompt:
+            messagebox.showerror("Error", "Please enter a prompt to enhance")
+            return
+        
+        # Get API token
+        api_token = self.token_entry.get().strip()
+        
+        if not api_token:
+            messagebox.showerror("Error", "Please enter your Replicate API token")
+            return
+        
+        # Set API token in environment
+        os.environ["REPLICATE_API_TOKEN"] = api_token
+        
+        # Show loading indicator in the UI
+        self.progress_var.set("Enhancing prompt...")
+        
+        # Use a thread to avoid freezing the UI
+        threading.Thread(target=self._enhance_prompt_thread, args=(original_prompt,)).start()
+    
+    def _enhance_prompt_thread(self, original_prompt):
+        """Run prompt enhancement in a separate thread"""
+        try:
+            # Add debug log
+            self.root.after(0, lambda: self.add_log(f"Starting prompt enhancement with text: '{original_prompt}'"))
+            
+            # Claude system prompt and instruction
+            system_prompt = "You are a creative assistant that helps enhance text prompts for AI image generation."
+            
+            user_prompt = f"""
+            Here is a user's prompt for AI image generation:
+            '{original_prompt}'
+            
+            Please enhance this prompt to be more detailed and descriptive. Focus on:
+            1. Adding visual details that would help create a better image
+            2. Specifying artistic style, lighting, perspective, and composition
+            3. Using descriptive adjectives and clear visual language
+            
+            Keep the essence and main subject of the original prompt intact.
+            Return ONLY the enhanced prompt text with no explanations, introductions, or other text.
+            """
+            
+            # Log the API call
+            self.root.after(0, lambda: self.add_log("Calling Claude API via Replicate..."))
+            
+            # Run the Claude model on Replicate
+            output = replicate.run(
+                "anthropic/claude-3.7-sonnet",
+                input={
+                    "system": system_prompt,
+                    "prompt": user_prompt,
+                    "temperature": 0.7,
+                    "max_tokens": 10500
+                }
+            )
+            
+            # Debug log the output type
+            self.root.after(0, lambda: self.add_log(f"Received response of type: {type(output)}"))
+            
+            # Handle different output formats - sometimes replicate returns iterator, sometimes direct string
+            enhanced_prompt = ""
+            if hasattr(output, '__iter__') and not isinstance(output, str):
+                # It's an iterator, collect all chunks
+                for item in output:
+                    enhanced_prompt += item
+                    # Log progress
+                    if len(enhanced_prompt) % 100 == 0:
+                        self.root.after(0, lambda: self.add_log(f"Received {len(enhanced_prompt)} characters..."))
+            else:
+                # It's a direct string or other format
+                enhanced_prompt = str(output)
+            
+            # Log final length
+            self.root.after(0, lambda: self.add_log(f"Final enhanced prompt length: {len(enhanced_prompt)} characters"))
+            
+            # If we got an empty response, provide a fallback
+            if not enhanced_prompt.strip():
+                enhanced_prompt = "Could not enhance the prompt. Please try again or use the original prompt."
+                self.root.after(0, lambda: self.add_log("Warning: Received empty response from API"))
+            
+            # Update UI in the main thread
+            self.root.after(0, lambda: self._display_enhanced_prompt(enhanced_prompt))
+            
+        except Exception as e:
+            # Fix the lambda issue by capturing the error message directly
+            error_msg = f"Error enhancing prompt: {str(e)}"
+            
+            # Use separate lambda functions with no reference to 'e'
+            self.root.after(0, lambda: self.add_log(error_msg))
+            self.root.after(0, lambda: self.progress_var.set(""))
+            self.root.after(0, lambda: messagebox.showerror("Error", error_msg))
+    
+    def _display_enhanced_prompt(self, enhanced_prompt):
+        """Display the enhanced prompt in the UI"""
+        # Clear loading message
+        self.progress_var.set("")
+        
+        # Reset and show enhanced prompt text
+        self.enhanced_prompt_text.delete("1.0", tk.END)
+        self.enhanced_prompt_text.insert(tk.END, enhanced_prompt)
+        
+        # Show the enhanced prompt frame
+        self.enhanced_prompt_frame.pack(fill=tk.X, pady=(5, 0), after=self.prompt_text)
+        
+        # Log the enhancement
+        self.add_log("Prompt enhanced successfully")
+    
+    def use_enhanced_prompt(self):
+        """Replace the original prompt with the enhanced version"""
+        enhanced_prompt = self.enhanced_prompt_text.get("1.0", tk.END).strip()
+        
+        # Clear original prompt and replace with enhanced version
+        self.prompt_text.delete("1.0", tk.END)
+        self.prompt_text.insert(tk.END, enhanced_prompt)
+        
+        # Hide the enhanced prompt frame
+        self.enhanced_prompt_frame.pack_forget()
+        
+        # Log the action
+        self.add_log("Enhanced prompt applied")
+
 class RoundedButton(tk.Canvas):
     """Custom canvas button with rounded corners"""
     def __init__(self, parent, width, height, corner_radius, bg_color, fg_color, text, command=None, **kwargs):
@@ -1131,10 +1342,11 @@ class RoundedButton(tk.Canvas):
         self.text = text
         self.command = command
         
-        # Initial color states
+        # Initial color states - more contrastive
         self.normal_bg = bg_color
         self.hover_bg = self._adjust_color(bg_color, 1.1)  # Slightly lighter
         self.pressed_bg = self._adjust_color(bg_color, 0.9)  # Slightly darker
+        self.border_color = "#000000"  # Add black border for contrast
         
         self._pressed = False
         self._drawing()
@@ -1151,12 +1363,13 @@ class RoundedButton(tk.Canvas):
         
         # Create rounded rectangle
         self.delete("all")
+        # Add a black border around the button
         self._create_rounded_rect(0, 0, self.winfo_width(), self.winfo_height(), 
-                                 self.corner_radius, fill=bg_color, outline=bg_color)
+                                 self.corner_radius, fill=bg_color, outline=self.border_color, width=2)
         
-        # Add text
+        # Add text with contrasting color
         self.create_text(self.winfo_width()/2, self.winfo_height()/2, text=self.text, 
-                         fill=self.fg_color, font=('Helvetica', 11, 'bold'))
+                         fill=self.fg_color, font=('Helvetica', 12, 'bold'))
     
     def _create_rounded_rect(self, x1, y1, x2, y2, radius, **kwargs):
         """Create a rounded rectangle"""
@@ -1296,10 +1509,24 @@ class ImageCarousel(tk.Toplevel):
         self.geometry("800x600")
         self.minsize(600, 500)
         
-        # Colors
-        self.bg_color = "#f8f9fa"  # Off-white background
-        self.accent_color = "#6c757d"  # Steel gray
-        self.primary_color = "#4285f4"  # Modern blue
+        # Get the parent's color scheme for consistency
+        if isinstance(parent, tk.Tk) or isinstance(parent, tk.Toplevel):
+            self.bg_color = parent.cget("bg")
+            if hasattr(parent, 'primary_color'):
+                self.primary_color = parent.primary_color
+                self.accent_color = parent.accent_color
+                self.button_text_color = parent.button_text_color
+            else:
+                # Fallback colors if parent doesn't have them
+                self.primary_color = "#FF9933"  # Tangerine orange
+                self.accent_color = "#FF8C00"   # Darker tangerine
+                self.button_text_color = "#000000"  # Black text
+        else:
+            # Default colors
+            self.bg_color = "#f0f0f0"      # Light gray background
+            self.primary_color = "#FF9933"  # Tangerine orange
+            self.accent_color = "#FF8C00"   # Darker tangerine
+            self.button_text_color = "#000000"  # Black text
         
         # Image data format: [(image, model_name, filepath), ...]
         self.images = images or []
@@ -1342,14 +1569,14 @@ class ImageCarousel(tk.Toplevel):
         self.nav_frame = tk.Frame(self.main_frame, bg=self.bg_color, height=100)
         self.nav_frame.pack(fill=tk.X, pady=10)
         
-        # Left button
+        # Left button - use parent class custom button with consistent styling
         self.left_btn = RoundedButton(
             self.nav_frame, 
             width=60, 
             height=40, 
             corner_radius=20, 
-            bg_color=self.accent_color, 
-            fg_color="#ffffff", 
+            bg_color=self.primary_color, 
+            fg_color=self.button_text_color,  # Black text for contrast
             text="←", 
             command=self.prev_image
         )
@@ -1379,14 +1606,14 @@ class ImageCarousel(tk.Toplevel):
         )
         self.counter_label.pack()
         
-        # Right button
+        # Right button - use parent class custom button with consistent styling
         self.right_btn = RoundedButton(
             self.nav_frame, 
             width=60, 
             height=40, 
             corner_radius=20, 
-            bg_color=self.accent_color, 
-            fg_color="#ffffff", 
+            bg_color=self.primary_color, 
+            fg_color=self.button_text_color,  # Black text for contrast
             text="→", 
             command=self.next_image
         )
