@@ -19,7 +19,7 @@ from tkinter import font
 class ImageGeneratorApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("AI Image Generator")
+        self.root.title("ImageGenie")
         self.root.geometry("900x700")
         self.root.configure(bg="#f0f0f0")
         
@@ -98,6 +98,17 @@ class ImageGeneratorApp:
         
         # API Token menu item
         file_menu.add_command(label="Change API Token", command=self.show_api_token_dialog)
+        
+        # Cancel Generation menu item (initially disabled)
+        self.cancel_menu_item = file_menu.add_command(
+            label="Cancel Generation", 
+            command=self.cancel_generation,
+            state=tk.DISABLED
+        )
+        
+        # Show Status Log menu item
+        file_menu.add_command(label="Show Status Log", command=self.show_status_log)
+        
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.on_closing)
         
@@ -191,16 +202,13 @@ class ImageGeneratorApp:
         if hasattr(self, 'token_frame'):
             self.token_frame.pack_forget()
         
-        # Close dialog
-        dialog.destroy()
-        
         # Add log message
         self.add_log("API token updated successfully")
     
     def show_about(self):
         """Show the about dialog"""
         about_dialog = tk.Toplevel(self.root)
-        about_dialog.title("About AI Image Generator")
+        about_dialog.title("About ImageGenie")
         about_dialog.geometry("400x300")
         about_dialog.resizable(False, False)
         about_dialog.transient(self.root)
@@ -217,7 +225,7 @@ class ImageGeneratorApp:
         content_frame.pack(fill=tk.BOTH, expand=True)
         
         # App title
-        ttk.Label(content_frame, text="AI Image Generator", font=("Helvetica", 16, "bold")).pack(pady=(0, 10))
+        ttk.Label(content_frame, text="ImageGenie", font=("Helvetica", 16, "bold")).pack(pady=(0, 10))
         
         # Description
         description = "A desktop application for generating images with AI models from Replicate"
@@ -235,7 +243,7 @@ class ImageGeneratorApp:
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         
         # Title
-        title_label = ttk.Label(main_frame, text="AI Image Generator", font=('Helvetica', 16, 'bold'))
+        title_label = ttk.Label(main_frame, text=" ImageGenie ", font=('Helvetica', 16, 'bold'))
         title_label.pack(pady=(0, 20))
         
         # Left panel for controls
@@ -294,7 +302,7 @@ class ImageGeneratorApp:
         self.prompt_text = scrolledtext.ScrolledText(prompt_frame, height=4, width=30, wrap=tk.WORD,
                                   font=('Helvetica', 10))
         self.prompt_text.pack(fill=tk.X, pady=5)
-        self.prompt_text.insert(tk.END, "an iguana on the beach, pointillism")
+        self.prompt_text.insert(tk.END, "Starry Night in NYC, in the sytle of Vincent Van Gogh's Starry Night")
         
         # Model selection frame with dropdown instead of checkboxes
         model_frame = ttk.Frame(left_panel)
@@ -357,6 +365,56 @@ class ImageGeneratorApp:
         )
         custom_model_cb.pack(anchor=tk.W)
         
+        # Multiple images per model option
+        multi_image_frame = ttk.Frame(self.advanced_options)
+        multi_image_frame.pack(fill=tk.X, pady=5)
+        
+        multi_image_label = ttk.Label(multi_image_frame, text="Images per model:")
+        multi_image_label.pack(anchor=tk.W)
+        
+        # Create a frame for the counter with +/- buttons
+        counter_frame = ttk.Frame(multi_image_frame)
+        counter_frame.pack(anchor=tk.W, pady=5)
+        
+        # Variable to store the number of images
+        self.images_per_model = tk.IntVar(value=1)
+        
+        # Decrement button
+        decrement_btn = ttk.Button(
+            counter_frame, 
+            text="-", 
+            width=2,
+            command=lambda: self.update_images_count(-1)
+        )
+        decrement_btn.pack(side=tk.LEFT)
+        
+        # Count display
+        count_label = ttk.Label(
+            counter_frame, 
+            textvariable=self.images_per_model,
+            width=3,
+            anchor=tk.CENTER
+        )
+        count_label.pack(side=tk.LEFT, padx=5)
+        
+        # Increment button
+        increment_btn = ttk.Button(
+            counter_frame, 
+            text="+", 
+            width=2,
+            command=lambda: self.update_images_count(1)
+        )
+        increment_btn.pack(side=tk.LEFT)
+        
+        # Help text for multiple images
+        help_text = ttk.Label(
+            multi_image_frame,
+            text="Generate multiple images from each selected model.",
+            font=("Helvetica", 9),
+            foreground="#666666"
+        )
+        help_text.pack(anchor=tk.W, pady=(0, 5))
+        
         # Timeout setting
         timeout_frame = ttk.Frame(self.advanced_options)
         timeout_frame.pack(fill=tk.X, pady=5)
@@ -385,36 +443,14 @@ class ImageGeneratorApp:
         )
         self.generate_button.pack(pady=10)
         
-        # Cancel button
-        self.cancel_button = tk.Button(
-            button_frame,
-            text="Cancel Generation",
-            bg="#ea4335",  # Google red
-            fg="white",
-            font=('Helvetica', 11, 'bold'),
-            relief=tk.FLAT,
-            padx=15,
-            pady=8,
-            command=self.cancel_generation,
-            state=tk.DISABLED
-        )
-        self.cancel_button.pack(pady=5)
-        
         # Progress indicator
         self.progress_var = tk.StringVar(value="")
         self.progress_label = ttk.Label(button_frame, textvariable=self.progress_var)
         self.progress_label.pack(pady=5)
         
-        # Status log
-        status_frame = ttk.Frame(left_panel)
-        status_frame.pack(fill=tk.X, pady=10)
-        
-        status_label = ttk.Label(status_frame, text="Status Log:")
-        status_label.pack(anchor=tk.W)
-        
-        self.status_text = scrolledtext.ScrolledText(status_frame, height=8, width=30, wrap=tk.WORD,
-                                   font=('Helvetica', 9))
-        self.status_text.pack(fill=tk.X, pady=5)
+        # Hidden status text - we'll keep this for storing logs but don't show it
+        self.status_text = scrolledtext.ScrolledText(self.root, height=1, width=1)
+        self.status_text.pack_forget()  # Don't display it
         self.status_text.config(state=tk.DISABLED)
     
     def _configure_image_frame(self, event):
@@ -444,11 +480,23 @@ class ImageGeneratorApp:
         return selected_models
     
     def add_log(self, message):
-        self.status_text.config(state=tk.NORMAL)
+        """Add a message to the log"""
         timestamp = datetime.now().strftime("%H:%M:%S")
-        self.status_text.insert(tk.END, f"[{timestamp}] {message}\n")
-        self.status_text.see(tk.END)
-        self.status_text.config(state=tk.DISABLED)
+        log_message = f"[{timestamp}] {message}\n"
+        
+        # Update main status text if it exists
+        if hasattr(self, 'status_text'):
+            self.status_text.config(state=tk.NORMAL)
+            self.status_text.insert(tk.END, log_message)
+            self.status_text.see(tk.END)
+            self.status_text.config(state=tk.DISABLED)
+        
+        # Update log window if it's open
+        if hasattr(self, 'log_window') and self.log_window.winfo_exists():
+            self.log_text.config(state=tk.NORMAL)
+            self.log_text.insert(tk.END, log_message)
+            self.log_text.see(tk.END)
+            self.log_text.config(state=tk.DISABLED)
     
     def save_token_to_file(self, token):
         """Save the API token to a settings file"""
@@ -538,9 +586,14 @@ class ImageGeneratorApp:
             self.generation_timeout = 180  # Default to 3 minutes
             self.timeout_var.set("180")
         
-        # Disable generate button, enable cancel button
+        # Disable generate button, enable cancel menu item
         self.generate_button.config(state=tk.DISABLED)
-        self.cancel_button.config(state=tk.NORMAL)
+        
+        # Enable cancel in menu
+        menubar = self.root.nametowidget(self.root.cget("menu"))
+        file_menu = menubar.nametowidget(menubar.entrycget(0, "menu"))
+        file_menu.entryconfigure("Cancel Generation", state=tk.NORMAL)
+        
         self.progress_var.set(f"Generating images with {len(selected_models)} model(s)...")
         self.add_log(f"Starting generation with prompt: {prompt[:50]}{'...' if len(prompt) > 50 else ''}")
         
@@ -562,33 +615,47 @@ class ImageGeneratorApp:
         # Store the API token in environment
         os.environ["REPLICATE_API_TOKEN"] = api_token
         
+        # Get the number of images per model
+        images_per_model = self.images_per_model.get()
+        
         # Create a tracker for completion
         generation_complete = threading.Event()
         
-        # Submit tasks to thread pool executor for each model
+        # Submit tasks to thread pool executor for each model and each image
         futures = []
         for idx, (model_name, model_id) in enumerate(selected_models):
-            self.add_log(f"Queuing model: {model_name}")
-            self.active_generations[model_name] = "queued"
-            
-            future = self.executor.submit(
-                self._generate_image_thread, 
-                api_token, 
-                prompt, 
-                model_name, 
-                model_id, 
-                idx,
-                generation_complete
-            )
-            futures.append(future)
+            for image_idx in range(images_per_model):
+                # Create a unique name for each generation to avoid duplicates
+                generation_name = model_name
+                if images_per_model > 1:
+                    generation_name = f"{model_name} (Image {image_idx+1})"
+                
+                self.add_log(f"Queuing model: {generation_name}")
+                self.active_generations[generation_name] = "queued"
+                
+                future = self.executor.submit(
+                    self._generate_image_thread, 
+                    api_token, 
+                    prompt, 
+                    generation_name,  # Pass the unique name
+                    model_id, 
+                    idx * images_per_model + image_idx,  # Unique position
+                    generation_complete
+                )
+                futures.append(future)
         
         # Start a watchdog timer to check on threads and re-enable button after timeout
         self.root.after(1000, self._check_generation_status, futures, generation_complete)
     
-    def _generate_image_thread(self, api_token, prompt, model_name, model_id, position, complete_event):
+    def _generate_image_thread(self, api_token, prompt, generation_name, model_id, position, complete_event):
         try:
-            self.root.after(0, lambda: self.add_log(f"Starting generation with {model_name}..."))
-            self.active_generations[model_name] = "running"
+            self.root.after(0, lambda: self.add_log(f"Starting generation with {generation_name}..."))
+            self.active_generations[generation_name] = "running"
+            
+            # Extract base model name (without the image number)
+            base_model_name = generation_name
+            if "(" in generation_name and ")" in generation_name:
+                base_model_name = generation_name.split("(")[0].strip()
             
             # Run model with timeout
             output = replicate.run(
@@ -597,8 +664,8 @@ class ImageGeneratorApp:
             )
             
             # If generation was canceled
-            if self.active_generations.get(model_name) == "canceled":
-                self.root.after(0, lambda: self.add_log(f"Generation with {model_name} was canceled"))
+            if self.active_generations.get(generation_name) == "canceled":
+                self.root.after(0, lambda: self.add_log(f"Generation with {generation_name} was canceled"))
                 return
             
             # Download and display image
@@ -608,14 +675,14 @@ class ImageGeneratorApp:
                 
             image_url = output[0] if isinstance(output, list) else output
             
-            self.root.after(0, lambda: self.add_log(f"Downloading image from {model_name}..."))
+            self.root.after(0, lambda: self.add_log(f"Downloading image from {generation_name}..."))
             
             response = requests.get(image_url, timeout=30)  # 30 second timeout for download
             if response.status_code == 200:
                 image_data = response.content
                 
                 # Create model-specific directory if it doesn't exist
-                model_dir = os.path.join(self.output_dir, model_name.replace(" ", "_"))
+                model_dir = os.path.join(self.output_dir, base_model_name.replace(" ", "_"))
                 if not os.path.exists(model_dir):
                     os.makedirs(model_dir)
                 
@@ -638,28 +705,28 @@ class ImageGeneratorApp:
                 
                 # Use thread-safe operation via after() to update UI and add to carousel
                 # Pass a unique identifier (model_name) to prevent duplicate images
-                self.root.after(0, lambda: self.add_to_carousel(image, model_name, filepath, model_name))
+                self.root.after(0, lambda: self.add_to_carousel(image, generation_name, filepath, generation_name))
                 
-                self.root.after(0, lambda: self.add_log(f"Image generated by {model_name} and saved at {filepath}"))
+                self.root.after(0, lambda: self.add_log(f"Image generated by {generation_name} and saved at {filepath}"))
             else:
-                error_msg = f"Error downloading image from {model_name}: HTTP {response.status_code}"
+                error_msg = f"Error downloading image from {generation_name}: HTTP {response.status_code}"
                 self.root.after(0, lambda: self.add_log(error_msg))
                 
         except requests.exceptions.Timeout:
-            error_msg = f"Timeout downloading image from {model_name}"
+            error_msg = f"Timeout downloading image from {generation_name}"
             self.root.after(0, lambda: self.add_log(error_msg))
         except requests.exceptions.RequestException as e:
-            error_msg = f"Network error with {model_name}: {str(e)}"
+            error_msg = f"Network error with {generation_name}: {str(e)}"
             self.root.after(0, lambda: self.add_log(error_msg))
         except concurrent.futures.TimeoutError:
-            error_msg = f"Generation timeout for {model_name} after {self.generation_timeout} seconds"
+            error_msg = f"Generation timeout for {generation_name} after {self.generation_timeout} seconds"
             self.root.after(0, lambda: self.add_log(error_msg))
         except Exception as e:
-            error_msg = f"Failed to generate image with {model_name}: {str(e)}"
+            error_msg = f"Failed to generate image with {generation_name}: {str(e)}"
             self.root.after(0, lambda: self.add_log(error_msg))
         finally:
             # Mark this generation as complete
-            self.active_generations[model_name] = "completed"
+            self.active_generations[generation_name] = "completed"
             
             # If all generations are complete, signal the event
             if all(status in ["completed", "canceled"] for status in self.active_generations.values()):
@@ -697,9 +764,14 @@ class ImageGeneratorApp:
                 self.update_embedded_carousel()
     
     def re_enable_generate_button(self):
-        """Re-enable the generate button and disable the cancel button"""
+        """Re-enable the generate button and disable the cancel menu item"""
         self.generate_button.config(state=tk.NORMAL)
-        self.cancel_button.config(state=tk.DISABLED)
+        
+        # Disable cancel in menu
+        menubar = self.root.nametowidget(self.root.cget("menu"))
+        file_menu = menubar.nametowidget(menubar.entrycget(0, "menu"))
+        file_menu.entryconfigure("Cancel Generation", state=tk.DISABLED)
+        
         self.add_log("Ready for next generation")
     
     def cancel_generation(self):
@@ -955,6 +1027,97 @@ class ImageGeneratorApp:
         # Set the carousel to the same index as the embedded one
         self.carousel.current_index = self.embedded_current_index
         self.carousel.update_display()
+
+    def show_status_log(self):
+        """Show the status log in a separate window"""
+        if hasattr(self, 'log_window') and self.log_window.winfo_exists():
+            # If log window already exists, just bring it to front
+            self.log_window.lift()
+            return
+            
+        # Create a new window for the log
+        self.log_window = tk.Toplevel(self.root)
+        self.log_window.title("Status Log")
+        self.log_window.geometry("500x400")
+        self.log_window.minsize(400, 300)
+        
+        # Center the window
+        self.log_window.update_idletasks()
+        width = self.log_window.winfo_width()
+        height = self.log_window.winfo_height()
+        x = (self.log_window.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.log_window.winfo_screenheight() // 2) - (height // 2)
+        self.log_window.geometry(f'{width}x{height}+{x}+{y}')
+        
+        # Create a frame for the log
+        log_frame = ttk.Frame(self.log_window, padding=10)
+        log_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Create a heading
+        ttk.Label(log_frame, text="Status Log", font=("Helvetica", 14, "bold")).pack(anchor=tk.W, pady=(0, 10))
+        
+        # Create the log text widget
+        self.log_text = scrolledtext.ScrolledText(
+            log_frame, 
+            wrap=tk.WORD,
+            font=('Helvetica', 9)
+        )
+        self.log_text.pack(fill=tk.BOTH, expand=True)
+        
+        # Copy content from main status text if it exists
+        if hasattr(self, 'status_text'):
+            self.log_text.insert(tk.END, self.status_text.get(1.0, tk.END))
+        
+        # Disable editing
+        self.log_text.config(state=tk.DISABLED)
+        
+        # Make the log window update when new log entries are added
+        self.log_window.protocol("WM_DELETE_WINDOW", self.on_log_window_close)
+        
+        # Button frame at bottom
+        button_frame = ttk.Frame(log_frame)
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        # Clear button
+        clear_button = ttk.Button(
+            button_frame,
+            text="Clear Log",
+            command=self.clear_log
+        )
+        clear_button.pack(side=tk.RIGHT)
+        
+        # Close button
+        close_button = ttk.Button(
+            button_frame,
+            text="Close",
+            command=self.log_window.destroy
+        )
+        close_button.pack(side=tk.RIGHT, padx=5)
+    
+    def on_log_window_close(self):
+        """Handle log window closing"""
+        if hasattr(self, 'log_window'):
+            self.log_window.destroy()
+            self.log_window = None
+    
+    def clear_log(self):
+        """Clear the log contents"""
+        if hasattr(self, 'status_text'):
+            self.status_text.config(state=tk.NORMAL)
+            self.status_text.delete(1.0, tk.END)
+            self.status_text.config(state=tk.DISABLED)
+        
+        if hasattr(self, 'log_text') and self.log_text.winfo_exists():
+            self.log_text.config(state=tk.NORMAL)
+            self.log_text.delete(1.0, tk.END)
+            self.log_text.config(state=tk.DISABLED)
+
+    def update_images_count(self, delta):
+        """Update the number of images per model"""
+        new_value = self.images_per_model.get() + delta
+        # Enforce min and max values
+        if 1 <= new_value <= 5:  # Limit to a reasonable range
+            self.images_per_model.set(new_value)
 
 class RoundedButton(tk.Canvas):
     """Custom canvas button with rounded corners"""
