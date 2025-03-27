@@ -133,6 +133,9 @@ class ImageGeneratorApp:
 
         # Show Status Log menu item
         file_menu.add_command(label="Show Status Log", command=self.show_status_log)
+        
+        # Gallery menu item
+        file_menu.add_command(label="Image Gallery", command=self.show_gallery)
 
         # Arena Mode menu item
         self.arena_mode_menu_item = file_menu.add_command(
@@ -935,6 +938,9 @@ class ImageGeneratorApp:
 
                 image = Image.open(io.BytesIO(image_data))
 
+                # Save image to database
+                self.root.after(0, lambda: self.save_image_to_database(filepath, prompt, generation_name, model_id))
+
                 self.root.after(0, lambda: self.add_to_carousel(image, display_name, filepath, generation_name))
 
                 self.root.after(0,
@@ -963,6 +969,29 @@ class ImageGeneratorApp:
             # Check if all generations are done (completed, canceled, or timed out)
             if all(status in ["completed", "canceled", "timeout"] for status in self.active_generations.values()):
                 complete_event.set()
+                
+    def save_image_to_database(self, filepath, prompt, model_name, model_id):
+        """Save the generated image information to the database"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            image_id = str(uuid.uuid4())
+            user_id = self.current_user_id if self.current_user_id else 'anonymous'
+            
+            cursor.execute('''
+                INSERT INTO images (image_id, user_id, filepath, prompt, model_name, model_id)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (image_id, user_id, filepath, prompt, model_name, model_id))
+            
+            conn.commit()
+            self.add_log(f"Image saved to database with ID: {image_id}")
+            
+        except sqlite3.Error as e:
+            self.add_log(f"Database error while saving image: {str(e)}")
+        finally:
+            if conn:
+                conn.close()
 
     def _check_generation_status(self, futures, complete_event):
         """Check the status of image generation threads and update UI"""
@@ -1416,6 +1445,20 @@ class ImageGeneratorApp:
             command=self.show_fullscreen_carousel,
             state=tk.DISABLED
         )
+        
+        self.gallery_button = tk.Button(
+            image_bg_frame,
+            text="ℹ",
+            bg=self.primary_color,
+            fg=self.button_text_color,
+            font=('Helvetica', 14),
+            relief=tk.RAISED,
+            borderwidth=2,
+            width=2,
+            height=1,
+            command=self.view_current_in_gallery,
+            state=tk.DISABLED
+        )
 
         nav_frame = ttk.Frame(carousel_frame)
         nav_frame.pack(fill=tk.X, pady=5)
@@ -1471,9 +1514,11 @@ class ImageGeneratorApp:
             self.embedded_model_label.config(text="No images yet")
             self.embedded_counter_label.config(text="")
             self.fullscreen_button.config(state=tk.DISABLED)
+            self.gallery_button.config(state=tk.DISABLED)
             return
 
         self.fullscreen_button.config(state=tk.NORMAL)
+        self.gallery_button.config(state=tk.NORMAL)
 
         image, model_name, filepath = self.carousel_images[self.embedded_current_index]
 
@@ -1551,6 +1596,7 @@ class ImageGeneratorApp:
         parent = self.fullscreen_button.master
         parent.update_idletasks()
         self.fullscreen_button.place(relx=1.0, rely=1.0, x=-10, y=-10, anchor=tk.SE)
+        self.gallery_button.place(relx=1.0, rely=1.0, x=-50, y=-10, anchor=tk.SE)
 
         # Update label text based on arena mode
         if self.arena_mode:
@@ -1568,12 +1614,47 @@ class ImageGeneratorApp:
 
         self.embedded_left_btn.config(state=tk.NORMAL if has_prev else tk.DISABLED)
         self.embedded_right_btn.config(state=tk.NORMAL if has_next else tk.DISABLED)
-
+        
+    def view_current_in_gallery(self):
+        """View the current carousel image in the gallery detail view"""
+        if not self.carousel_images:
+            return
+            
+        # Get the current image information
+        _, model_name, filepath = self.carousel_images[self.embedded_current_index]
+        
+        try:
+            # Look up the image in the database by filepath
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT image_id FROM images
+                WHERE filepath = ? AND model_name = ?
+            ''', (filepath, model_name))
+            
+            result = cursor.fetchone()
+            
+            if result:
+                # If found in the database, show its details
+                image_id = result[0]
+                self.show_image_details(image_id)
+            else:
+                # If not found, show a message
+                messagebox.showinfo("Image Details", 
+                    "This image is not saved in the gallery database yet. Generate new images to add them to the gallery.")
+                
+        except sqlite3.Error as e:
+            self.add_log(f"Database error while finding image: {str(e)}")
+        finally:
+            if conn:
+                conn.close()
+                
     def embedded_next_image(self):
         """Show the next image in embedded carousel"""
         if not self.carousel_images or self.embedded_current_index >= len(self.carousel_images) - 1:
             return
-
+            
         self.embedded_current_index += 1
         self.update_embedded_carousel()
 
@@ -1800,6 +1881,20 @@ class ImageGeneratorApp:
                     rank_position INTEGER NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (session_id) REFERENCES voting_sessions (session_id)
+                )
+            ''')
+
+            # Create images table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS images (
+                    image_id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    filepath TEXT NOT NULL,
+                    prompt TEXT NOT NULL,
+                    model_name TEXT NOT NULL,
+                    model_id TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (user_id)
                 )
             ''')
 
@@ -2268,6 +2363,344 @@ class ImageGeneratorApp:
         except Exception as e:
             self.add_log(f"Error in model execution thread: {str(e)}")
 
+    def show_gallery(self):
+        """Show the gallery of all generated images"""
+        try:
+            # Get all images from database and from the output directory
+            all_images = self.get_gallery_images()
+            
+            if not all_images:
+                self.add_log("No images found in gallery")
+                messagebox.showinfo("Gallery Empty", "No images found in the gallery")
+                return
+            
+            # Create gallery window
+            gallery_window = tk.Toplevel(self.root)
+            gallery_window.title("Image Gallery")
+            gallery_window.geometry("900x600")
+            gallery_window.minsize(600, 400)
+            
+            # Create frame for filter options
+            filter_frame = ttk.Frame(gallery_window)
+            filter_frame.pack(fill=tk.X, padx=10, pady=5)
+            
+            # Label for filter
+            ttk.Label(filter_frame, text="Filter by model:").pack(side=tk.LEFT, padx=5)
+            
+            # Get unique model names from all images
+            model_names = sorted(set(image[3] for image in all_images if image[3]))
+            model_names.insert(0, "All Models")  # Add option to show all models
+            
+            # Variable to store selected model
+            selected_model = tk.StringVar(value="All Models")
+            
+            # Create dropdown for model selection
+            model_dropdown = ttk.Combobox(filter_frame, textvariable=selected_model, values=model_names, state="readonly")
+            model_dropdown.pack(side=tk.LEFT, padx=5)
+            
+            # Label to show count of displayed images
+            image_count_var = tk.StringVar(value=f"Showing {len(all_images)} images")
+            ttk.Label(filter_frame, textvariable=image_count_var).pack(side=tk.RIGHT, padx=10)
+            
+            # Create canvas for scrolling
+            canvas = tk.Canvas(gallery_window)
+            scrollbar = ttk.Scrollbar(gallery_window, orient="vertical", command=canvas.yview)
+            scrollable_frame = ttk.Frame(canvas)
+            
+            scrollable_frame.bind(
+                "<Configure>",
+                lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+            )
+            
+            canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+            canvas.configure(yscrollcommand=scrollbar.set)
+            
+            # Pack canvas and scrollbar
+            canvas.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+            
+            # Frame for the grid of images
+            grid_frame = ttk.Frame(scrollable_frame)
+            grid_frame.pack(fill="both", expand=True, padx=10, pady=10)
+            
+            # Store references to prevent garbage collection
+            self.thumbnail_refs = []
+            
+            # Function to update gallery based on filter
+            def update_gallery(*args):
+                # Clear previous images
+                for widget in grid_frame.winfo_children():
+                    widget.destroy()
+                
+                self.thumbnail_refs.clear()
+                
+                # Filter images based on selected model
+                selected = selected_model.get()
+                filtered_images = all_images if selected == "All Models" else [img for img in all_images if img[3] == selected]
+                
+                # Update count
+                image_count_var.set(f"Showing {len(filtered_images)} images")
+                
+                # Number of columns in the grid
+                num_columns = 4
+                
+                # Display images in grid
+                for i, (image_id, filepath, prompt, model_name, created_at) in enumerate(filtered_images):
+                    row = i // num_columns
+                    col = i % num_columns
+                    
+                    # Create frame for each image
+                    img_frame = ttk.Frame(grid_frame, padding=5)
+                    img_frame.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
+                    
+                    try:
+                        # Open and resize image for thumbnail
+                        img = Image.open(filepath)
+                        img.thumbnail((200, 200))
+                        photo = ImageTk.PhotoImage(img)
+                        self.thumbnail_refs.append(photo)  # Keep reference
+                        
+                        # Create image label
+                        img_label = ttk.Label(img_frame, image=photo)
+                        img_label.pack(fill="both", expand=True)
+                        
+                        # Add click event to show details
+                        img_label.bind("<Button-1>", lambda e, id=image_id: self.show_image_details(id))
+                        
+                        # Add caption with truncated prompt
+                        if prompt:
+                            caption = prompt[:25] + "..." if len(prompt) > 25 else prompt
+                            ttk.Label(img_frame, text=caption).pack()
+                        
+                        # Add model name if available
+                        if model_name:
+                            ttk.Label(img_frame, text=f"Model: {model_name}").pack()
+                    
+                    except Exception as e:
+                        ttk.Label(img_frame, text="Error loading image").pack()
+                        self.add_log(f"Error loading image thumbnail: {str(e)}")
+            
+            # Bind the update function to the dropdown
+            selected_model.trace_add("write", update_gallery)
+            
+            # Initial display
+            update_gallery()
+            
+        except Exception as e:
+            self.add_log(f"Error showing gallery: {str(e)}")
+            messagebox.showerror("Error", f"Could not show gallery: {str(e)}")
+
+    def get_gallery_images(self):
+        """Get all images from the database and from the output directory"""
+        all_images = []
+        try:
+            # First get images from database
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT image_id, filepath, prompt, model_name, created_at
+                FROM images
+                ORDER BY created_at DESC
+            ''')
+            
+            db_images = {filepath: (image_id, filepath, prompt, model_name, created_at) 
+                        for image_id, filepath, prompt, model_name, created_at in cursor.fetchall()}
+            
+            # Add database images to the results
+            all_images.extend(list(db_images.values()))
+            
+            # Then scan the output directory for any images not in the database
+            for root, dirs, files in os.walk(self.output_dir):
+                for file in files:
+                    if file.lower().endswith(('.png', '.jpg', '.jpeg')):
+                        filepath = os.path.join(root, file)
+                        
+                        # Skip if already added from database
+                        if filepath in db_images:
+                            continue
+                        
+                        # Extract model name from the directory structure
+                        model_dir = os.path.basename(root)
+                        model_name = model_dir.replace("_", " ")
+                        
+                        # Create a placeholder image ID
+                        image_id = f"file_{uuid.uuid4()}"
+                        
+                        # Try to extract prompt from filename (if using our naming convention)
+                        filename_parts = os.path.splitext(file)[0].split('_')
+                        if len(filename_parts) > 1:
+                            # Last part is likely the timestamp, join the rest for the prompt
+                            prompt = " ".join(filename_parts[:-1]).replace("_", " ")
+                        else:
+                            prompt = "Unknown prompt"
+                            
+                        # Get file creation time
+                        try:
+                            created_at = datetime.fromtimestamp(os.path.getctime(filepath)).strftime('%Y-%m-%d %H:%M:%S')
+                        except:
+                            created_at = "Unknown"
+                            
+                        # Add to results
+                        all_images.append((image_id, filepath, prompt, model_name, created_at))
+            
+            # Sort all images by creation time (newest first)
+            all_images.sort(key=lambda x: x[4] if x[4] != "Unknown" else "", reverse=True)
+            
+            return all_images
+            
+        except sqlite3.Error as e:
+            self.add_log(f"Database error while getting gallery images: {str(e)}")
+            return []
+        except Exception as e:
+            self.add_log(f"Error scanning image directory: {str(e)}")
+            return []
+        finally:
+            if conn:
+                conn.close()
+                
+    def show_image_details(self, image_id):
+        """Show details of a specific image"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT image_id, filepath, prompt, model_name, model_id, created_at
+                FROM images
+                WHERE image_id = ?
+            ''', (image_id,))
+            
+            image_data = cursor.fetchone()
+            
+            if not image_data:
+                messagebox.showerror("Error", "Image not found in database.")
+                return
+                
+            image_id, filepath, prompt, model_name, model_id, created_at = image_data
+            
+            # Create image details window
+            details_window = tk.Toplevel(self.root)
+            details_window.title(f"Image by {model_name}")
+            details_window.geometry("800x600")
+            details_window.minsize(600, 500)
+            
+            # Center the window
+            details_window.update_idletasks()
+            width = details_window.winfo_width()
+            height = details_window.winfo_height()
+            x = (details_window.winfo_screenwidth() // 2) - (width // 2)
+            y = (details_window.winfo_screenheight() // 2) - (height // 2)
+            details_window.geometry(f'{width}x{height}+{x}+{y}')
+            
+            # Main content frame
+            main_frame = ttk.Frame(details_window, padding=20)
+            main_frame.pack(fill=tk.BOTH, expand=True)
+            
+            # Image frame
+            image_frame = ttk.Frame(main_frame, style='ImageBg.TFrame')
+            image_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
+            
+            try:
+                # Load the image
+                pil_image = Image.open(filepath)
+                
+                # Calculate scaled size to fit window while maintaining aspect ratio
+                max_width = 700
+                max_height = 400
+                img_width, img_height = pil_image.size
+                scale = min(max_width / img_width, max_height / img_height)
+                new_width = int(img_width * scale)
+                new_height = int(img_height * scale)
+                
+                # Resize the image
+                resized_image = pil_image.resize((new_width, new_height), Image.LANCZOS)
+                img = ImageTk.PhotoImage(resized_image)
+                
+                # Keep a reference to prevent garbage collection
+                self.detail_image = img
+                
+                # Image label
+                img_label = ttk.Label(image_frame, image=img, background='white')
+                img_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+                
+            except Exception as e:
+                error_msg = f"Error loading image: {str(e)}"
+                self.add_log(error_msg)
+                ttk.Label(image_frame, text=error_msg).pack(pady=50)
+            
+            # Details frame
+            details_frame = ttk.Frame(main_frame)
+            details_frame.pack(fill=tk.X, pady=(0, 20))
+            
+            # Details grid
+            ttk.Label(details_frame, text="Model:", font=("Helvetica", 11, "bold")).grid(
+                row=0, column=0, sticky=tk.W, padx=(0, 10), pady=5)
+            ttk.Label(details_frame, text=model_name).grid(
+                row=0, column=1, sticky=tk.W, pady=5)
+                
+            ttk.Label(details_frame, text="Prompt:", font=("Helvetica", 11, "bold")).grid(
+                row=1, column=0, sticky=tk.W, padx=(0, 10), pady=5)
+                
+            # Prompt text with wrapping
+            prompt_text = scrolledtext.ScrolledText(
+                details_frame, 
+                height=4, 
+                width=60, 
+                wrap=tk.WORD,
+                font=("Helvetica", 10)
+            )
+            prompt_text.grid(row=1, column=1, sticky=tk.W, pady=5)
+            prompt_text.insert(tk.END, prompt)
+            prompt_text.config(state=tk.DISABLED)
+            
+            ttk.Label(details_frame, text="Created:", font=("Helvetica", 11, "bold")).grid(
+                row=2, column=0, sticky=tk.W, padx=(0, 10), pady=5)
+            ttk.Label(details_frame, text=created_at).grid(
+                row=2, column=1, sticky=tk.W, pady=5)
+            
+            # Configure grid to expand properly
+            details_frame.columnconfigure(1, weight=1)
+            
+            # Button frame
+            button_frame = ttk.Frame(main_frame)
+            button_frame.pack(fill=tk.X, pady=(10, 0))
+            
+            # Use prompt button
+            use_prompt_btn = ttk.Button(
+                button_frame,
+                text="Use This Prompt",
+                command=lambda: self.use_gallery_prompt(prompt, details_window)
+            )
+            use_prompt_btn.pack(side=tk.LEFT)
+            
+            # Close button
+            close_button = ttk.Button(
+                button_frame,
+                text="Close",
+                command=details_window.destroy
+            )
+            close_button.pack(side=tk.RIGHT)
+            
+        except sqlite3.Error as e:
+            self.add_log(f"Database error while getting image details: {str(e)}")
+            messagebox.showerror("Error", f"Failed to get image details: {str(e)}")
+        except Exception as e:
+            self.add_log(f"Error showing image details: {str(e)}")
+            messagebox.showerror("Error", f"Failed to show image details: {str(e)}")
+        finally:
+            if conn:
+                conn.close()
+                
+    def use_gallery_prompt(self, prompt, details_window=None):
+        """Use the prompt from a gallery image"""
+        self.prompt_text.delete("1.0", tk.END)
+        self.prompt_text.insert(tk.END, prompt)
+        self.add_log(f"Using prompt from gallery: {prompt[:50]}...")
+        
+        if details_window:
+            details_window.destroy()
+
 
 class MultiSelectDropdown(ttk.Frame):
     """A custom dropdown widget that allows multiple selections"""
@@ -2456,4 +2889,5 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = ImageGeneratorApp(root)
     root.protocol("WM_DELETE_WINDOW", app.on_closing)
+    root.mainloop()
     root.mainloop()

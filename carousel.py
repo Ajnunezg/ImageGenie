@@ -118,6 +118,9 @@ class ImageCarousel(tk.Toplevel):
     def __init__(self, parent, images=None):
         super().__init__(parent)
 
+        # Store parent reference
+        self.parent = parent
+        
         # Check if parent is in arena mode
         self.arena_mode = hasattr(parent, 'arena_mode') and parent.arena_mode
         
@@ -215,6 +218,21 @@ class ImageCarousel(tk.Toplevel):
         image_bg_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         self.image_label = tk.Label(image_bg_frame, bg=self.bg_color)
+        
+        # Add Gallery button if parent has the show_image_details method
+        if hasattr(self.parent, 'view_current_in_gallery'):
+            self.gallery_button = tk.Button(
+                image_bg_frame,
+                text="ℹ",
+                bg=self.primary_color,
+                fg=self.button_text_color,
+                font=('Helvetica', 14),
+                relief=tk.RAISED,
+                borderwidth=2,
+                width=2,
+                height=1,
+                command=self.view_in_gallery
+            )
 
         self.nav_frame = tk.Frame(self.main_frame, bg=self.bg_color, height=100)
         self.nav_frame.pack(fill=tk.X, pady=10)
@@ -419,6 +437,12 @@ class ImageCarousel(tk.Toplevel):
         self.image_label.image = tk_image
 
         self.image_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+        
+        # Position the gallery button if it exists
+        if hasattr(self, 'gallery_button'):
+            parent = self.image_label.master
+            parent.update_idletasks()
+            self.gallery_button.place(relx=1.0, rely=1.0, x=-10, y=-10, anchor=tk.SE)
 
         # Update text based on arena mode
         if self.arena_mode:
@@ -465,3 +489,18 @@ class ImageCarousel(tk.Toplevel):
             self.images[index] = (image, model_name, filepath)
             if self.current_index == index:
                 self.update_display()
+                
+    def view_in_gallery(self):
+        """View the current image in the parent's gallery view"""
+        if not self.images or not hasattr(self.parent, 'view_current_in_gallery'):
+            return
+            
+        # Set the parent's carousel to the same image we're viewing
+        if hasattr(self.parent, 'embedded_current_index'):
+            self.parent.embedded_current_index = self.current_index
+            
+        # Call the parent's gallery view method
+        self.parent.view_current_in_gallery()
+        
+        # Close the carousel window
+        self.destroy()
